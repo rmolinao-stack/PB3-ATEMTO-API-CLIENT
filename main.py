@@ -4,7 +4,6 @@ Uso CLI para probar la API ATEMTO:
 
 """
 
-
 import argparse
 import json
 
@@ -69,9 +68,9 @@ def demo_total(
         response2.raise_for_status()
 
         print()
-        print("="*20 + " HISTORIAL del THREAD " + thread_id + " " + "="*20)
+        print("="*20 + " HISTORIAL THREAD " + thread_id + " " + "="*20)
         print(json.dumps(response2.json(), indent=2, ensure_ascii=False))
-        print("="*60)
+        print("="*20 + " FIN HISTORIAL THREAD " + thread_id + " " + "="*20)
 
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "N/A"
@@ -82,10 +81,8 @@ def demo_total(
     except requests.RequestException as e:
         print(f"\n[ERROR DE RED] {e}")
 
-
 def main() -> None:
     
-
     parser = argparse.ArgumentParser(
         description="""
         Cliente de la API ATEMTO para pruebas desde línea de comandos.
