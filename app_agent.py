@@ -96,8 +96,8 @@ with st.sidebar:
         _reset()
         st.rerun()
 
-st.title(":gray[AT]e:gray[M]to - Agente de transporte ATM")
-st.caption("Multiagente · ATM")
+st.title(":gray[AT]e:gray[M]to - Agente de transporte ATM conectado por API")
+st.caption("Multiagente · ATM · Conectado por API")
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
