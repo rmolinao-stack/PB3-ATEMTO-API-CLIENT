@@ -111,9 +111,6 @@ def service_ejecutar_plan(
         historial = historial["messages"]
 
     pregunta = _con_historial(thread_id, historial, mensaje)
-    print("=" * 40)
-    print(pregunta)
-    print("=" * 40)
 
     out = _post(
         "/ask",
