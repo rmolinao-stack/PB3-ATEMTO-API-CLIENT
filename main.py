@@ -10,12 +10,12 @@ import json
 import requests
 import os
 from dotenv import load_dotenv
-from config import API_KEY, URL_BASE, REQUEST_TIMEOUT
+from config import API_KEY, URL_BASE, REQUEST_TIMEOUT_SECONDS
 
 def check_health() -> bool:
     """Comprueba que la API está activa antes de lanzar consultas."""
     try:
-        resp = requests.get(f"{URL_BASE}/health", timeout=REQUEST_TIMEOUT)
+        resp = requests.get(f"{URL_BASE}/health", timeout=REQUEST_TIMEOUT_SECONDS)
         resp.raise_for_status()
         print(f"[OK] API disponible en {URL_BASE} -> {resp.json()}")
         return True
@@ -91,7 +91,7 @@ def main() -> None:
 
     ############ RMO: PARAMETROS ###################
     parser.add_argument("--health", action="store_true", help="Verifica si la API está viva")
-    parser.add_argument("--demo", type=str, help="Lanza la pregunta sobre el thread DEMO-9999 y devuelve el historial de DEMO-9999")
+    parser.add_argument("--demo", type=str, help="Lanza la pregunta sobre el thread DEMO-MAIN-9999-afK77MnSs37 y devuelve el historial de DEMO-MAIN-9999-afK77MnSs37")
 
     args = parser.parse_args()
   
@@ -104,14 +104,14 @@ def main() -> None:
             print("La API está disponible.")
     if args.demo:
         print("Opción demo seleccionada ...")
-        thread_id = "DEMO-9999"
+        thread_id = "DEMO-MAIN-9999-afK77MnSs37"
         pregunta = args.demo
         demo_total(pregunta=pregunta, 
                               thread_id=thread_id, 
                               auto_aprobar=True, 
                               api_key=API_KEY, 
                               api_base_url=URL_BASE, 
-                              request_timeout=REQUEST_TIMEOUT)
+                              request_timeout=REQUEST_TIMEOUT_SECONDS)
         
         
         
