@@ -4,18 +4,15 @@
 """
 
 from typing import Any
-
-import requests
-import streamlit as st
-import uuid
-
-from config import (
-    API_KEY,
-    MAX_PREGUNTA_CHARS,
-    MAX_TURNS_DEFAULT,
-    REQUEST_TIMEOUT_SECONDS,
-    URL_BASE,
+from service import (
+    service_nuevo_thread_id,
+    service_crear_estado,
+    service_ejecutar_plan,
+    service_aprobar_plan,
 )
+
+
+import streamlit as st
 
 
 st.set_page_config(
@@ -31,138 +28,6 @@ SALUDO = (
     "decirte cuando va llegar el siguiente tren (solo estaciones de TMB). "
     "Preguntame y te daré un plan listo para que lo apruebes en la barra lateral."
 )
-
-def _llamar(funcion, ruta: str, **kwargs) -> Any:
-    """Devuelve el JSON de la API o {"api_error": {...}} (401, 404, 429, 504, red...) sin lanzar."""
-    try:
-        resp = funcion(
-            f"{URL_BASE}{ruta}",
-            params={"api_key": API_KEY},
-            timeout=REQUEST_TIMEOUT_SECONDS,
-            **kwargs,
-        )
-    except requests.RequestException as exc:
-        return {"api_error": {"ruta": ruta, "status": None, "detalle": f"{type(exc).__name__}: {exc}"}}
-
-    if not resp.ok:
-        try:
-            detalle = resp.json().get("detail", resp.text)
-        except (ValueError, AttributeError):
-            detalle = resp.text
-        return {"api_error": {"ruta": ruta, "status": resp.status_code, "detalle": detalle}}
-    return resp.json()
-
-
-def _post(ruta: str, body: dict[str, Any]) -> Any:
-    return _llamar(requests.post, ruta, json=body)
-
-
-def _get(ruta: str) -> Any:
-    return _llamar(requests.get, ruta)
-
-
-def _es_error(out: Any) -> bool:
-    return isinstance(out, dict) and "api_error" in out
-
-
-HISTORIAL_FIN = "--- FIN HISTORIAL DE MENSAJES ---"
-NOTA_OMITIDOS = "[... mensajes anteriores omitidos por longitud ...]"
-ROLES = {"user": "Usuario", "assistant": "Asistente"}
-
-
-def _contenido_limpio(mensaje: dict[str, Any]) -> str:
-    """El servidor guarda la pregunta tal cual se envió (con su historial): nos quedamos solo con la parte final."""
-    contenido = (mensaje.get("content") or "").strip()
-    return contenido.rpartition(HISTORIAL_FIN)[2].strip()
-
-
-def _con_historial(thread_id: str, mensajes: list[dict[str, Any]], pregunta: str) -> str:
-    """Antepone el historial (más recientes primero si no cabe) entre marcadores a la pregunta."""
-    cabecera = f"--- HISTORIAL DE MENSAJES DE LA CONVERSACIÓN ID {thread_id} ---"
-    lineas = [
-        f"{ROLES.get(m.get('role'), m.get('role') or '?')}: {texto}"
-        for m in mensajes
-        if (texto := _contenido_limpio(m))
-    ]
-    if not lineas:
-        return pregunta
-
-    # +4 saltos de línea entre bloques; la nota se reserva siempre para simplificar
-    presupuesto = MAX_PREGUNTA_CHARS - len(pregunta) - len(cabecera) - len(HISTORIAL_FIN) - len(NOTA_OMITIDOS) - 8
-    elegidas: list[str] = []
-    for linea in reversed(lineas):
-        if presupuesto < len(linea) + 1:
-            break
-        presupuesto -= len(linea) + 1
-        elegidas.insert(0, linea)
-    if not elegidas:
-        return pregunta
-    if len(elegidas) < len(lineas):
-        elegidas.insert(0, NOTA_OMITIDOS)
-
-    return "\n".join([cabecera, *elegidas, HISTORIAL_FIN, "", pregunta])
-
-
-def service_nuevo_thread_id() -> str:
-    return f"ATM-{uuid.uuid4().hex[:8]}"
-
-
-def service_crear_estado(thread_id: str) -> dict[str, Any]:
-    """Estado local mínimo; el estado real del agente vive en el servidor (por thread_id)."""
-    return {
-        "thread_id": thread_id,
-        "respuesta": "",
-        "plan": [],
-        "done": False,
-        "error": None,
-        "pendiente_hitl": False,
-        "turnos": 0,
-        "api_error": None,
-    }
-
-
-def service_ejecutar_plan(estado: dict[str, Any], mensaje: str, thread_id: str) -> dict[str, Any]:
-    """GET /threads/{id}/messages + POST /ask — auto_aprobar=False para conservar el flujo HITL manual."""
-    historial = _get(f"/threads/{thread_id}/messages")
-    if _es_error(historial):
-        return {**estado, "api_error": historial["api_error"]}
-
-    out = _post(
-        "/ask",
-        {
-            "pregunta": _con_historial(thread_id, historial, mensaje),
-            "thread_id": thread_id,
-            "auto_aprobar": False,
-        },
-    )
-    if "api_error" in out:
-        # No cierra la conversación: el usuario puede reintentar
-        return {**estado, "api_error": out["api_error"]}
-    return {
-        **estado,
-        "respuesta": out["respuesta"],
-        "done": out["done"],
-        "pendiente_hitl": out["pendiente_hitl"],
-        "error": out["error"],
-        "turnos": estado["turnos"] + 1,
-        "api_error": None,
-    }
-
-
-def service_aprobar_plan(thread_id: str, aprobado: bool, estado: dict[str, Any]) -> dict[str, Any]:
-    """POST /approve."""
-    out = _post("/approve", {"thread_id": thread_id, "aprobado": aprobado})
-    if "api_error" in out:
-        return {**estado, "api_error": out["api_error"]}
-    return {
-        **estado,
-        "respuesta": out["respuesta"],
-        "done": out["done"],
-        "pendiente_hitl": out["pendiente_hitl"],
-        "error": out["error"],
-        "api_error": None,
-    }
-
 
 def _reset(thread_id: str | None = None) -> None:
     thread_id = thread_id or service_nuevo_thread_id()
@@ -201,12 +66,6 @@ if "messages" not in st.session_state:
 
 with st.sidebar:
     st.header("Configuración")
-    max_turns = st.slider(
-        "Max Turns (turnos de la conversación)",
-        min_value=1,
-        max_value=12,
-        value=MAX_TURNS_DEFAULT,
-    )
     # La key incluye el id para que el campo se refresque cuando _reset() genera uno nuevo
     thread_id_input = st.text_input(
         "ID Conversación",
@@ -246,19 +105,16 @@ for message in st.session_state.messages:
 
 estado = st.session_state.agent_state
 chat_bloqueado = bool(estado.get("done") or estado.get("error"))
-turnos_hechos = len(estado.get("traza") or [])
 hitl_bloquea = bool(estado.get("pendiente_hitl"))
 
 if chat_bloqueado:
     st.info("Conversación cerrada (`done` o `error`). Pulsa «Nueva conversación».")
 elif hitl_bloquea:
     st.warning("Plan pendiente de aprobación — usa los botones de la barra lateral.")
-elif turnos_hechos >= max_turns:
-    st.warning("Has alcanzado `max_turns`. Pulsa «Nueva conversación» o sube el límite.")
 
 if prompt := st.chat_input(
     "Escribe tu mensaje…",
-    disabled=chat_bloqueado or hitl_bloquea or turnos_hechos >= max_turns,
+    disabled=chat_bloqueado or hitl_bloquea,
 ):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -297,17 +153,14 @@ if prompt := st.chat_input(
     if estado.get("pendiente_hitl") or estado.get("done") or estado.get("error"):
         st.rerun()
 
-with st.expander("Estado / log / tools (debug)"):
+with st.expander("Log (debug)"):
     st.json(
         {
             "thread_id": st.session_state.get("thread_id"),
-            "plan": st.session_state.agent_state.get("plan"),
             "pendiente_hitl": st.session_state.agent_state.get("pendiente_hitl"),
-            "plan_aprobado": st.session_state.agent_state.get("plan_aprobado"),
             "done": st.session_state.agent_state.get("done"),
-            "log": st.session_state.agent_state.get("log"),
-            "error": st.session_state.agent_state.get("error"),
-            "api_error": st.session_state.agent_state.get("api_error"),
-            "traza": st.session_state.agent_state.get("traza"),
+            "respuesta": st.session_state.agent_state.get("respuesta"),
+            "error_agente": st.session_state.agent_state.get("error"),
+            "error_http": st.session_state.agent_state.get("api_error"),
         }
     )
