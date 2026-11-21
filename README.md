@@ -129,5 +129,49 @@ En cada turno del chat de `app_agent.py` el cliente llama a `GET /threads/{threa
 ### Timeouts
 
 * Un único timeout para todo el cliente: `REQUEST_TIMEOUT_SECONDS` en `config.py` (310 s por petición), algo por encima del timeout de turno del servidor (300 s por defecto) y del arranque en frío de Render. Lo usan tanto `service.py` (Streamlit) como `main.py` (CLI), incluido `--health`.
+
+## Despliegue del cliente en Render
+
+La opción más rápida y ligera es usar el entorno nativo de **Python 3** de Render (sin necesidad de `Dockerfile`): la interfaz solo renderiza la web y llama a la API por HTTP, por lo que consume muy poca memoria dentro del límite gratuito de 512 MB.
+
+Requisito previo: la API de **PB3-ATEMTO-WITH-API** ya debe estar desplegada y accesible públicamente.
+
+1. **Prepara `requirements.txt` y protege las claves en GitHub.**
+   Comprueba que en la raíz del proyecto está `requirements.txt` con las librerías del cliente (`streamlit`, `requests`, `python-dotenv`) y que `.env` y `.streamlit/secrets.toml` están en el `.gitignore` (ya lo están) antes de hacer `git push` a la rama que se vaya a desplegar.
+   *Verificación:* ejecuta `git status` y comprueba que ni `.env` ni carpetas locales como `.venv` aparecen pendientes de subir.
+
+2. **Crea el Web Service en Render con entorno Python 3.**
+   En el panel de Render pulsa **New + → Web Service**, conecta el repositorio de GitHub del cliente y rellena estos campos:
+
+   * **Name:** `atemto-api-client` (o el nombre que prefieras para distinguirlo de la API).
+   * **Branch:** `main`.
+   * **Region:** la misma región donde está desplegada la API (p. ej. `Frankfurt (EU Central)`) para minimizar la latencia entre ambos.
+   * **Language / Runtime:** **Python 3**.
+   * **Build Command:**
+
+     ```bash
+     pip install -r requirements.txt
+     ```
+
+   * **Start Command:**
+
+     ```bash
+     streamlit run app_agent.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+     ```
+
+   * **Instance Type:** **Free** ($0 / month).
+
+   *Verificación:* confirma que el *Start Command* incluye exactamente `--server.address 0.0.0.0` y `--server.port $PORT`, imprescindibles para que el balanceador de Render pueda enrutar el tráfico hacia Streamlit. El fichero principal de este proyecto es `app_agent.py`.
+
+3. **Añade las variables de entorno del cliente.**
+   En la sección **Environment Variables** da de alta las variables que lee el código (siempre sin comillas):
+
+   * `API_BASE_URL`: URL pública de la API en Render, **sin barra** `/` **final**.
+   * `API_KEY`: la misma clave de acceso configurada en el Web Service de la API.
+
+   Pulsa **Deploy Web Service**.
+   *Verificación:* en la pestaña **Logs** de Render aparece el mensaje `You can now view your Streamlit app in your browser` y el estado superior cambia a **Live** en verde.
+
+**Nota sobre el plan gratuito:** tanto la API como el cliente se "duermen" tras un periodo de inactividad. La primera petición puede tardar en despertar ambos servicios, y por eso el cliente usa un timeout de 310 s (ver sección «Timeouts»).
   
 
