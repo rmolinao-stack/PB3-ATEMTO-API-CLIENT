@@ -129,4 +129,5 @@ En cada turno del chat de `app_agent.py` el cliente llama a `GET /threads/{threa
 ### Timeouts
 
 * Un único timeout para todo el cliente: `REQUEST_TIMEOUT_SECONDS` en `config.py` (310 s por petición), algo por encima del timeout de turno del servidor (300 s por defecto) y del arranque en frío de Render. Lo usan tanto `service.py` (Streamlit) como `main.py` (CLI), incluido `--health`.
+  
 
