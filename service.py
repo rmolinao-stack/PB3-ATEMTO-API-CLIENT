@@ -98,6 +98,15 @@ def service_crear_estado(thread_id: str) -> dict[str, Any]:
     }
 
 
+def _parse_plan(texto: str) -> list[str]:
+    items: list[str] = []
+    for line in (texto or "").splitlines():
+        s = line.strip()
+        if s.startswith(("-", "•", "*")):
+            items.append(s.lstrip("-•* ").strip())
+    return [i for i in items if i]
+
+
 def service_ejecutar_plan(
         estado: dict[str, Any], 
         mensaje: str, 
@@ -126,6 +135,7 @@ def service_ejecutar_plan(
     return {
         **estado,
         "respuesta": out["respuesta"],
+        "plan": _parse_plan(out["respuesta"]) if out["pendiente_hitl"] and out["respuesta"] else [],
         "done": out["done"],
         "pendiente_hitl": out["pendiente_hitl"],
         "error": out["error"],
@@ -141,6 +151,7 @@ def service_aprobar_plan(thread_id: str, aprobado: bool, estado: dict[str, Any])
     return {
         **estado,
         "respuesta": out["respuesta"],
+        "plan": _parse_plan(out["respuesta"]) if out["pendiente_hitl"] and out["respuesta"] else [],
         "done": out["done"],
         "pendiente_hitl": out["pendiente_hitl"],
         "error": out["error"],

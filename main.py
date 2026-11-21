@@ -1,15 +1,14 @@
-"""Cliente de la API ATEMTO.
+"""Cliente CLI de la API ATeMto.
 
-Uso CLI para probar la API ATEMTO:
-
+Uso:
+  python main.py --health
+  python main.py --demo "pregunta"
 """
 
 import argparse
 import json
 
 import requests
-import os
-from dotenv import load_dotenv
 from config import API_KEY, URL_BASE, REQUEST_TIMEOUT_SECONDS
 
 def check_health() -> bool:
